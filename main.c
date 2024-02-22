@@ -38,6 +38,7 @@
 #include <avr/sleep.h>
 #include <util/atomic.h>
 
+#include "drivers/zacwire.h"
 #include "mcu/twi.h"
 #include "mcu/util.h"
 #include "os/os.h"
@@ -66,10 +67,10 @@ void performMeasurements(void);
 
 // Definition of I2C Data packet
 typedef struct {
-  uint16_t huba_pressure;
-  float huba_temperature;
-  float ds18b20_temperature;
-  uint8_t atlas_conductivity[4];
+    uint16_t huba_pressure;
+    float huba_temperature;
+    float ds18b20_temperature;
+    uint8_t atlas_conductivity[4];
 } packet_t;
 
 // Forward declaration of variables
@@ -83,31 +84,31 @@ ds18b20_t d;
 /// @brief Initialize the power control
 /// @details 5V and 3V3 will be disabled after initialization
 void pwr_init(void) {
-  ENABLE_5V_PORT.DIR |= ENABLE_5V_PIN;   // 5V_on as output
-  ENABLE_3V3_PORT.DIR |= ENABLE_3V3_PIN; // 3V3_on as output
+    ENABLE_5V_PORT.DIR |= ENABLE_5V_PIN;   // 5V_on as output
+    ENABLE_3V3_PORT.DIR |= ENABLE_3V3_PIN; // 3V3_on as output
 
-  pwr_3v3Enable(PWR_DISABLE);
-  pwr_5vEnable(PWR_DISABLE);
+    pwr_3v3Enable(PWR_DISABLE);
+    pwr_5vEnable(PWR_DISABLE);
 }
 
 /// @brief Enable/disable 5V
 /// @param enable PWR_DISABLE (0x00) to disable, PWR_ENABLE (0x01) to enable
 void pwr_5vEnable(uint8_t enable) {
-  if (enable != 0x00) {
-    ENABLE_5V_PORT.OUT |= ENABLE_5V_PIN; // Switch 5V_on to on
-  } else {
-    ENABLE_5V_PORT.OUT &= ~ENABLE_5V_PIN; // Switch 5V_on to off
-  }
+    if (enable != 0x00) {
+        ENABLE_5V_PORT.OUT |= ENABLE_5V_PIN; // Switch 5V_on to on
+    } else {
+        ENABLE_5V_PORT.OUT &= ~ENABLE_5V_PIN; // Switch 5V_on to off
+    }
 }
 
 /// @brief Enable/disable 3V3
 /// @param enable PWR_DISABLE (0x00) to disable, PWR_ENABLE (0x01) to enable
 void pwr_3v3Enable(uint8_t enable) {
-  if (enable != 0x00) {
-    ENABLE_3V3_PORT.OUT &= ~ENABLE_3V3_PIN; // Switch 3V3_on to on
-  } else {
-    ENABLE_3V3_PORT.OUT |= ENABLE_3V3_PIN; // Switch 3V3_on to off
-  }
+    if (enable != 0x00) {
+        ENABLE_3V3_PORT.OUT &= ~ENABLE_3V3_PIN; // Switch 3V3_on to on
+    } else {
+        ENABLE_3V3_PORT.OUT |= ENABLE_3V3_PIN; // Switch 3V3_on to off
+    }
 }
 
 /// @brief Perform measurements from different sensors and store them in global
@@ -116,8 +117,8 @@ void pwr_3v3Enable(uint8_t enable) {
 /// from the I2C ISR it will enable 5V and 3V3, initialize sensors, perform the
 /// measurements and disable 5V and 3V3
 void performMeasurements() {
-  // Most measurements are timing sensitive, so ignore interrupts
-  ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+    // Most measurements are timing sensitive, so ignore interrupts
+    // ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
     // Conductivity data (string holding uS/cm)
     uint8_t conductivity[4] = {0};
 
@@ -131,14 +132,15 @@ void performMeasurements() {
     // Enable 5V and 3V3
     pwr_5vEnable(PWR_ENABLE);
     pwr_3v3Enable(PWR_ENABLE);
+    delay_ms(1);
 
     // read value from Huba sensor (zacwire)
-    uint8_t parity = huba713_read(&huba_pressure, &huba_temperature);
-    if (parity != 0x00) {
-      // If the parity is not 0x00, the data is invalid, so set values to
-      // invalid
-      huba_pressure = 0;
-      huba_temperature = 200.0;
+    int err = huba713_read(&huba_pressure, &huba_temperature);
+    if (err < 0) {
+        // If the parity is not 0x00, the data is invalid, so set values to
+        // invalid
+        huba_pressure = 0;
+        huba_temperature = 200.0;
     }
     delay_us(1000);
 
@@ -176,9 +178,9 @@ void performMeasurements() {
         .ds18b20_temperature = ds18b20_temperature,
     };
     for (int ii = 0; ii < 4; ii++) {
-      packet.atlas_conductivity[ii] = conductivity[ii];
+        packet.atlas_conductivity[ii] = conductivity[ii];
     }
-  }
+    //}
 }
 
 /// @brief Handler for cmd 0x11 from I2C master
@@ -187,8 +189,8 @@ void performMeasurements() {
 /// @param buf Pointer to the buffer to store the data in
 /// @param len Length of the buffer
 void twi_cmd_11_handler(uint8_t *buf, uint8_t len) {
-  buf[0] = sizeof(packet_t);
-  memcpy(&buf[1], &packet, buf[0]);
+    buf[0] = sizeof(packet_t);
+    memcpy(&buf[1], &packet, buf[0]);
 }
 volatile uint8_t doMeasurement = 0x00;
 
@@ -197,8 +199,8 @@ volatile uint8_t doMeasurement = 0x00;
 /// @param buf Pointer to the buffer to store the data in, not used
 /// @param len Length of the buffer, not used
 void twi_cmd_10_handler(uint8_t *buf, uint8_t len) {
-  doMeasurement = 0x01;
-  //  os_pushTask(&twi_perform_task);
+    doMeasurement = 0x01;
+    //  os_pushTask(&twi_perform_task);
 }
 
 /// @brief Accapted TWI (I2C) commands
@@ -207,87 +209,76 @@ twi_cmd_t twi_cmds[] = {
     {0x11, &twi_cmd_11_handler},
     {0x10, &twi_cmd_10_handler}};
 
-///// @brief Function called before entering sleep. Used to disable hardware
-// void mfm_sleep()
-//{
-//   cli();
-//
-//   set_sleep_mode(SLEEP_MODE_PWR_DOWN);
-//   _PROTECTED_WRITE(BOD_CTRLA, BOD_CTRLA & ~(BOD_SLEEP_gm));
-//   sleep_enable();
-//   sei();
-//   sleep_cpu();
-//   sleep_disable();
-//   sei();
-// }
-
 /// @brief Waits for the watchdog to sync
 /// @details
 void wdt_sync(void) {
-  // Wait for data to synchronize between clock and wdt domain
-  while ((WDT.STATUS & WDT_SYNCBUSY_bm) == WDT_SYNCBUSY_bm)
-    ;
+    // Wait for data to synchronize between clock and wdt domain
+    while ((WDT.STATUS & WDT_SYNCBUSY_bm) == WDT_SYNCBUSY_bm)
+        ;
 }
 
 /// @brief Function called before entering sleep
 /// @details Disables BOD to save power; Disable the watchdog timer
 void os_presleep() {
-  wdt_disable();
-  wdt_sync();
+    wdt_disable();
+    wdt_sync();
 }
 
 /// @brief Function called after waking up from sleep
 void os_postsleep(void) {
-  wdt_enable(WDT_PERIOD_8KCLK_gc);
-  wdt_sync();
+    wdt_enable(WDT_PERIOD_8KCLK_gc);
+    wdt_sync();
 }
 
 /// @brief main function
 int main() {
-  doMeasurement = 0;
+    doMeasurement = 0;
 
-  os_init();
+    os_init();
 
-  // Initialize the delay system
-  delay_init();
+    // Initialize the delay system
+    delay_init();
 
-  // Initialize the power control
-  pwr_init();
+    // Initialize the power control
+    pwr_init();
 
-  // Make sure the peripherals (sensors) are off
-  delay_ms(1000);
 
-  // Set resolution of DS18B20 temperature sensor
-  d.resolution = DS18B20_RES_12;
+    PORTA.DIRSET = PIN1_bm;
+    PORTA.OUTTGL = PIN1_bm;
+    // Make sure the peripherals (sensors) are off
+    // delay_ms(1000);
 
-  // Initialize the HUBA sensor
-  huba713_init();
+    // Set resolution of DS18B20 temperature sensor
+    d.resolution = DS18B20_RES_12;
 
-  // Enable interrupts
-  sei();
+    // Initialize the HUBA sensor
+    huba713_init();
 
-  // Initialize the TWI Interface (set address to 0x36)
-  twi_init(0x36, 1);
+    // Enable interrupts
+    sei();
 
-  // Set BOD mode for sleep mode (Disabled to save power)
-  _PROTECTED_WRITE(BOD_CTRLA, BOD_CTRLA & ~(BOD_SLEEP_gm));
+    // Initialize the TWI Interface (set address to 0x36)
+    twi_init(0x36, 1);
 
-  // Set the watchdog timer
-  wdt_enable(WDT_PERIOD_8KCLK_gc);
-  wdt_sync();
+    // Set BOD mode for sleep mode (Disabled to save power)
+    _PROTECTED_WRITE(BOD_CTRLA, BOD_CTRLA & ~(BOD_SLEEP_gm));
 
-  // Main loop
-  while (1) {
-    // Check if we need to perform measurements
-    if (doMeasurement == 0x01) {
-      doMeasurement = 0x00;
-      performMeasurements();
+    // Set the watchdog timer
+    wdt_enable(WDT_PERIOD_8KCLK_gc);
+    wdt_sync();
+
+    // Main loop
+    while (1) {
+        // Check if we need to perform measurements
+        if (doMeasurement == 0x01) {
+            doMeasurement = 0x00;
+            performMeasurements();
+        }
+
+        // Kick the watchdog
+        wdt_reset();
+
+        // Sleep the system, note: watchdog will be disabled during sleep
+        os_sleep();
     }
-
-    // Kick the watchdog
-    wdt_reset();
-
-    // Sleep the system, note: watchdog will be disabled during sleep
-    os_sleep();
-  }
 }

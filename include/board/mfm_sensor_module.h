@@ -31,6 +31,7 @@
 
 #define ZACWIRE_PORT PORTA
 #define ZACWIRE_PIN PIN6_bm
+#define ZACWIRE_PINp PIN6_bp
 
 #define TEST_PORT PORTA
 #define TEST_PIN PIN2_bm

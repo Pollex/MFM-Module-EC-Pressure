@@ -9,7 +9,6 @@
 
 
 void zacwire_init(void);
-void zacwire_waitForIdle(void);
-uint8_t zacwire_readByte(uint8_t *data);
+int8_t zacwire_read(uint8_t *data, uint8_t count);
 
 #endif // ZACWIRE_H
