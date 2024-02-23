@@ -67,10 +67,10 @@ void performMeasurements(void);
 
 // Definition of I2C Data packet
 typedef struct {
-    uint16_t huba_pressure;
-    float huba_temperature;
-    float ds18b20_temperature;
-    uint8_t atlas_conductivity[4];
+  uint16_t huba_pressure;
+  float huba_temperature;
+  float ds18b20_temperature;
+  uint8_t atlas_conductivity[8];
 } packet_t;
 
 // Forward declaration of variables
@@ -120,7 +120,7 @@ void performMeasurements() {
     // Most measurements are timing sensitive, so ignore interrupts
     // ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
     // Conductivity data (string holding uS/cm)
-    uint8_t conductivity[4] = {0};
+    uint8_t conductivity[8] = {0};
 
     // Temperature data from DS18B20
     float ds18b20_temperature;
@@ -177,8 +177,8 @@ void performMeasurements() {
         .huba_temperature = huba_temperature,
         .ds18b20_temperature = ds18b20_temperature,
     };
-    for (int ii = 0; ii < 4; ii++) {
-        packet.atlas_conductivity[ii] = conductivity[ii];
+    for (int ii = 0; ii < 8; ii++) {
+      packet.atlas_conductivity[ii] = conductivity[ii];
     }
     //}
 }

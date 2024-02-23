@@ -47,7 +47,7 @@ static void atlas_ezo_ec_sendCommandAndWaitForResponse(char *cmd)
 #define TIMEOUT 100 // Timeout in milliseconds
 
 /// @brief Request value from the Atlas Scientific EZO EC
-/// @param value Pointer to a string that will hold the value
+/// @param value Pointer to a string that will hold the value, size should be fixed to 8 characters
 /// @return 0 if successful, -1 if not
 int atlas_ezo_ec_requestValue(char *value) {
   // Read while there is still data in the buffer to flush the buffer
@@ -62,37 +62,39 @@ int atlas_ezo_ec_requestValue(char *value) {
   // The expected response is x.xx\r*OK\r
   uint8_t response[12];
   uint8_t c;
-  uint8_t ii;
   uint8_t done = 0;
 
-  // Get the start time
-  uint32_t start_time = millis();
+  // Read characters from ec sensor until a carriage return is received or the buffer is full
+  // We don't know how many characters we will receive, but we have a fixed buffer size of 8,
+  // so move the characters to the end of the buffer and pad with zeros
+  uint8_t nofChars = 0;
+  char tmp[8];
+  do {
+    c = uart_read();
 
-  // Read characters until the end of the response is reached
-  while (done == 0) {
-    // Check if the timeout has been reached
-    if (millis() - start_time > TIMEOUT) {
-      return -1; // Return an error code
+    // Store every character except a carriage return
+    if (c != 0x0D) {
+      tmp[nofChars] = c;
+      nofChars++;
     }
+  } while ((c != 0x0D) && (nofChars < 8));
 
-    // start with the value, which is 4 characters and a carriage return
-    for (ii = 0; ii < 4; ii++) {
-      c = uart_read();
-
-      // If the carriage return is reached something went wrong, so start reading the status
-      if (c == 0x0D) {
-        done = 0x01;
-        break;
-      }
-      value[ii] = c;
-    }
-
-    // Read while there is still data in the buffer to flush the buffer
-    while (USART0.STATUS & USART_RXCIF_bm) {
-      uint8_t h = USART0.RXDATAH;
-      uint8_t l = USART0.RXDATAL;
-    }
+  // Fill value with zeros for padding
+  for (int ii = 0; ii < 8; ii++) {
+    value[ii] = 0;
   }
+
+  // Now lets move the received characters to the end of the buffer and pad with zeros
+  for (int ii = 0; ii < nofChars; ii++) {
+    value[8 - nofChars + ii] = tmp[ii];
+  }
+
+  // Read while there is still data in the buffer to flush the buffer
+  while (USART0.STATUS & USART_RXCIF_bm) {
+    uint8_t h = USART0.RXDATAH;
+    uint8_t l = USART0.RXDATAL;
+  }
+
   return 0;
 }
 
