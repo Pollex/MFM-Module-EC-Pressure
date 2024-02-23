@@ -23,3 +23,4 @@ add_subdirectory(src)
 
 add_avr_executable(${PROJECT_NAME} main.c)
 avr_target_link_libraries(${PROJECT_NAME} mod_drivers mod_perif mod_mcu mod_os)
+avr_target_compile_definitions(${PROJECT_NAME} PUBLIC F_CPU=3333333UL)
