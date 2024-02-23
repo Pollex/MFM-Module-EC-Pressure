@@ -85,8 +85,8 @@ int atlas_ezo_ec_requestValue(char *value) {
   }
 
   // Now lets move the received characters to the end of the buffer and pad with zeros
-  for (int ii = nofChars - 1; ((ii < 8) && (ii >= 0)); ii++) {
-    value[ii] = tmp[ii - nofChars];
+  for (int ii = 0; ii < nofChars; ii++) {
+    value[8 - nofChars + ii] = tmp[ii];
   }
 
   // Read while there is still data in the buffer to flush the buffer
