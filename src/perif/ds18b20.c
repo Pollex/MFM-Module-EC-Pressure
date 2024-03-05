@@ -45,7 +45,7 @@ float get_res_bit(uint8_t res) {
   return 0.0625;
 }
 
-uint16_t wait_convert(uint8_t res) {
+void wait_convert(uint8_t res) {
   switch (res) {
   case DS18B20_RES_12:
     delay_ms(750);

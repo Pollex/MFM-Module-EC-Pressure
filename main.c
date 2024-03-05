@@ -56,26 +56,23 @@ static void pwr_5vEnable(uint8_t enable);
 static void pwr_3v3Enable(uint8_t enable);
 static void pwr_init(void);
 
-void performMeasurements(void);
+void perform_measurements(void);
 
-/// @brief Task to perform measurements to be called as os_task (decoupling from
-/// I2C ISR)
-// os_task twi_perform_task = {
-//         .func = &performMeasurements,
-//         .priority = 1,
-// };
-
-// Definition of I2C Data packet
-typedef struct {
-  uint16_t huba_pressure;
-  float huba_temperature;
-  float ds18b20_temperature;
-  uint8_t atlas_conductivity[8];
-} packet_t;
+#define FLAG_CALIBRATED 0x01;
 
 // Forward declaration of variables
 /// @brief I2C Data packet
-packet_t packet = {0};
+struct {
+    uint16_t huba_pressure;
+    float huba_temperature;
+    float ds18b20_temperature;
+    uint8_t atlas_conductivity[8];
+    uint8_t flags;
+} packet;
+
+// "tasks" that will be performed on wakeup (interrupt)
+volatile uint8_t doCalibration = 0;
+volatile uint8_t doMeasurement = 0;
 
 /// @brief DS18B20 struct to hold resolution, defined here so we can set it once
 /// in main
@@ -116,7 +113,7 @@ void pwr_3v3Enable(uint8_t enable) {
 /// @details This function is called from the twi_perform_task, which is called
 /// from the I2C ISR it will enable 5V and 3V3, initialize sensors, perform the
 /// measurements and disable 5V and 3V3
-void performMeasurements() {
+void perform_measurements() {
     // Most measurements are timing sensitive, so ignore interrupts
     // ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
     // Conductivity data (string holding uS/cm)
@@ -149,6 +146,7 @@ void performMeasurements() {
     pwr_5vEnable(PWR_DISABLE);
 
     // read value from DS18B20 sensor (one-wire)
+    ds18b20_read(&d, 0);
     ds18b20_temperature = ds18b20_read(&d, 0);
 
     // Turn the Atlas Scientific EZO EC sensor on by setting the enable pin
@@ -156,6 +154,13 @@ void performMeasurements() {
 
     // We only want to read the value once, so disable continuous reading
     atlas_ezo_ec_disableContinuousReading();
+
+    // Set temperature compensation
+    if (ds18b20_temperature > -50 && ds18b20_temperature < 50) {
+        atlas_ezo_ec_setTemperature((uint8_t)ds18b20_temperature);
+    } else {
+        atlas_ezo_ec_setTemperature(10);
+    }
 
     // read value from Atlas Scientific EZO EC sensor (UART)
     atlas_ezo_ec_requestValue(conductivity);
@@ -172,16 +177,24 @@ void performMeasurements() {
     pwr_3v3Enable(PWR_DISABLE);
 
     // Store the data in data struct
-    packet = (packet_t){
-        .huba_pressure = huba_pressure,
-        .huba_temperature = huba_temperature,
-        .ds18b20_temperature = ds18b20_temperature,
-    };
+    packet.huba_pressure = huba_pressure;
+    packet.huba_temperature = huba_temperature;
+    packet.ds18b20_temperature = ds18b20_temperature;
     for (int ii = 0; ii < 8; ii++) {
-      packet.atlas_conductivity[ii] = conductivity[ii];
+        packet.atlas_conductivity[ii] = conductivity[ii];
     }
-    //}
 }
+
+void perform_calibration(void) {
+    atlas_ezo_ec_calibrate();
+    packet.flags |= FLAG_CALIBRATED;
+}
+
+/// @brief Handler for cmd 0x80 from I2C master
+/// @details Triggers a calibration
+/// @param buf Pointer to the buffer to store the data in
+/// @param len Length of the buffer
+void twi_cmd_80_handler(uint8_t *buf, uint8_t len) { doCalibration = 1; }
 
 /// @brief Handler for cmd 0x11 from I2C master
 /// @details Copies the sensor data from the data packet to the bus; kept short
@@ -189,23 +202,20 @@ void performMeasurements() {
 /// @param buf Pointer to the buffer to store the data in
 /// @param len Length of the buffer
 void twi_cmd_11_handler(uint8_t *buf, uint8_t len) {
-    buf[0] = sizeof(packet_t);
+    buf[0] = sizeof(packet);
     memcpy(&buf[1], &packet, buf[0]);
+    memset(&packet, 0, sizeof(packet));
 }
-volatile uint8_t doMeasurement = 0x00;
 
 /// @brief Handler for cmd 0x10 from I2C master
 /// @details Creates a task to start measurements; kept short as possible!
 /// @param buf Pointer to the buffer to store the data in, not used
 /// @param len Length of the buffer, not used
-void twi_cmd_10_handler(uint8_t *buf, uint8_t len) {
-    doMeasurement = 0x01;
-    //  os_pushTask(&twi_perform_task);
-}
+void twi_cmd_10_handler(uint8_t *buf, uint8_t len) { doMeasurement = 0x01; }
 
 /// @brief Accapted TWI (I2C) commands
 twi_cmd_t twi_cmds[] = {
-    // 0x10 will fire cmd_10
+    {0x80, &twi_cmd_80_handler},
     {0x11, &twi_cmd_11_handler},
     {0x10, &twi_cmd_10_handler}};
 
@@ -242,7 +252,6 @@ int main() {
     // Initialize the power control
     pwr_init();
 
-
     PORTA.DIRSET = PIN1_bm;
     PORTA.OUTTGL = PIN1_bm;
     // Make sure the peripherals (sensors) are off
@@ -272,7 +281,11 @@ int main() {
         // Check if we need to perform measurements
         if (doMeasurement == 0x01) {
             doMeasurement = 0x00;
-            performMeasurements();
+            perform_measurements();
+        }
+        if (doCalibration == 1) {
+            doCalibration = 0;
+            perform_calibration();
         }
 
         // Kick the watchdog
