@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.11)
 project(mfm-sensor-module)
 
 # Default ATTiny814 speed
-add_compile_definitions(F_CPU=3333333UL)
+add_compile_definitions(F_CPU=3333333UL TWI_CMD_COUNT=3)
 get_filename_component(C_COMPILER_DIR ${CMAKE_C_COMPILER} DIRECTORY)
 set(CMAKE_FIND_ROOT_PATH "${C_COMPILER_DIR}/../avr")
 set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
@@ -23,4 +23,4 @@ add_subdirectory(src)
 
 add_avr_executable(${PROJECT_NAME} main.c)
 avr_target_link_libraries(${PROJECT_NAME} mod_drivers mod_perif mod_mcu mod_os)
-avr_target_compile_definitions(${PROJECT_NAME} PUBLIC F_CPU=3333333UL)
+#avr_target_compile_definitions(${PROJECT_NAME} PUBLIC F_CPU=3333333UL)

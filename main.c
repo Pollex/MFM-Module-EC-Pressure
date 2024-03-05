@@ -62,7 +62,7 @@ void perform_measurements(void);
 
 // Forward declaration of variables
 /// @brief I2C Data packet
-struct {
+struct packet_t {
     uint16_t huba_pressure;
     float huba_temperature;
     float ds18b20_temperature;
@@ -162,6 +162,12 @@ void perform_measurements() {
         atlas_ezo_ec_setTemperature(10);
     }
 
+    if (doCalibration) {
+        atlas_ezo_ec_calibrate();
+        packet.flags |= FLAG_CALIBRATED;
+        doCalibration = 0;
+    }
+
     // read value from Atlas Scientific EZO EC sensor (UART)
     atlas_ezo_ec_requestValue(conductivity);
 
@@ -185,11 +191,6 @@ void perform_measurements() {
     }
 }
 
-void perform_calibration(void) {
-    atlas_ezo_ec_calibrate();
-    packet.flags |= FLAG_CALIBRATED;
-}
-
 /// @brief Handler for cmd 0x80 from I2C master
 /// @details Triggers a calibration
 /// @param buf Pointer to the buffer to store the data in
@@ -202,9 +203,9 @@ void twi_cmd_80_handler(uint8_t *buf, uint8_t len) { doCalibration = 1; }
 /// @param buf Pointer to the buffer to store the data in
 /// @param len Length of the buffer
 void twi_cmd_11_handler(uint8_t *buf, uint8_t len) {
-    buf[0] = sizeof(packet);
+    buf[0] = sizeof(struct packet_t);
     memcpy(&buf[1], &packet, buf[0]);
-    memset(&packet, 0, sizeof(packet));
+    memset(&packet, 0, sizeof(struct packet_t));
 }
 
 /// @brief Handler for cmd 0x10 from I2C master
@@ -215,9 +216,10 @@ void twi_cmd_10_handler(uint8_t *buf, uint8_t len) { doMeasurement = 0x01; }
 
 /// @brief Accapted TWI (I2C) commands
 twi_cmd_t twi_cmds[] = {
-    {0x80, &twi_cmd_80_handler},
+    {0x10, &twi_cmd_10_handler},
     {0x11, &twi_cmd_11_handler},
-    {0x10, &twi_cmd_10_handler}};
+    {0x80, &twi_cmd_80_handler},
+};
 
 /// @brief Waits for the watchdog to sync
 /// @details
@@ -282,10 +284,6 @@ int main() {
         if (doMeasurement == 0x01) {
             doMeasurement = 0x00;
             perform_measurements();
-        }
-        if (doCalibration == 1) {
-            doCalibration = 0;
-            perform_calibration();
         }
 
         // Kick the watchdog

@@ -141,9 +141,9 @@ int atlas_ezo_ec_calibrate(void) {
 
 int atlas_ezo_ec_setTemperature(uint8_t t) {
     // T,255\r\0   = 7 characters
-    static char *buf[7];
-    sprintf((char*)buf, "T,%d\r", t);
-    uart_sendString((char*)buf);
+    static char buf[10];
+    sprintf(buf, "T,%d\r", t);
+    uart_sendString(buf);
     char *response = uart_readline();
     if (strcmp(response, "*OK") == 0) {
         return 0;
