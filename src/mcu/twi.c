@@ -55,16 +55,20 @@ ISR(TWI0_TWIS_vect)
 
   if (isStop)
   {
-    if (twi_current_cmd)
+    if (twi_current_cmd) {
       twi_current_cmd->handler(twi_buffer, twi_buffer_rx);
+            twi_current_cmd = 0;
+        }
     return twi_end();
   }
 
   if (isAddr)
   {
     // Is restart, call handler
-    if (twi_busy && twi_current_cmd)
+    if (twi_busy && twi_current_cmd) {
       twi_current_cmd->handler(twi_buffer, twi_buffer_rx);
+            twi_current_cmd = 0;
+        }
 
     twi_busy = 1;
     twi_buffer_rx = 0;
