@@ -36,6 +36,7 @@
 
 #include <avr/interrupt.h>
 #include <avr/sleep.h>
+#include <stdint.h>
 #include <util/atomic.h>
 
 #include "drivers/zacwire.h"
@@ -58,7 +59,8 @@ static void pwr_init(void);
 
 void perform_measurements(void);
 
-#define FLAG_CALIBRATED 0x01;
+#define FLAG_CALIBRATED 0x01
+#define HUBA_MEDIAN_COUNT 11
 
 // Forward declaration of variables
 /// @brief I2C Data packet
@@ -108,36 +110,87 @@ void pwr_3v3Enable(uint8_t enable) {
     }
 }
 
+/* Function to sort an array using insertion sort*/
+void insertion_sort_u16(uint16_t arr[], int n) {
+    int i, key, j;
+    for (i = 1; i < n; i++) {
+        key = arr[i];
+        j = i - 1;
+
+        /* Move elements of arr[0..i-1], that are
+        greater than key, to one position ahead
+        of their current position */
+        while (j >= 1 && arr[j] > key) {
+            arr[j + 1] = arr[j];
+            j = j - 1;
+        }
+        arr[j + 1] = key;
+    }
+}
+
+/* Function to sort an array using insertion sort*/
+void insertion_sort_f(float arr[], int n) {
+    int i, key, j;
+    for (i = 1; i < n; i++) {
+        key = arr[i];
+        j = i - 1;
+
+        /* Move elements of arr[0..i-1], that are
+        greater than key, to one position ahead
+        of their current position */
+        while (j >= 1 && arr[j] > key) {
+            arr[j + 1] = arr[j];
+            j = j - 1;
+        }
+        arr[j + 1] = key;
+    }
+}
+
 /// @brief Perform measurements from different sensors and store them in global
 /// variables
 /// @details This function is called from the twi_perform_task, which is called
 /// from the I2C ISR it will enable 5V and 3V3, initialize sensors, perform the
 /// measurements and disable 5V and 3V3
 void perform_measurements() {
-    // Most measurements are timing sensitive, so ignore interrupts
-    // ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
     // Conductivity data (string holding uS/cm)
-    uint8_t conductivity[8] = {0};
+    static uint8_t conductivity[8] = {0};
+    static float ds18b20_temperature;
+    static uint16_t huba_pressure = 0;
+    static float huba_temperature = 0.0;
 
-    // Temperature data from DS18B20
-    float ds18b20_temperature;
-
-    // Pressure and temperature data from Huba sensor
-    uint16_t huba_pressure = 0;
-    float huba_temperature = 0.0;
+    uint16_t median_pressure[HUBA_MEDIAN_COUNT] = {0};
+    float median_temperature[HUBA_MEDIAN_COUNT] = {0};
 
     // Enable 5V and 3V3
     pwr_5vEnable(PWR_ENABLE);
     pwr_3v3Enable(PWR_ENABLE);
-    delay_ms(1);
+    delay_ms(10);
 
-    // read value from Huba sensor (zacwire)
-    int err = huba713_read(&huba_pressure, &huba_temperature);
-    if (err < 0) {
-        // If the parity is not 0x00, the data is invalid, so set values to
-        // invalid
+    // Measure huba sensor using median filter
+    int errs = 0;
+    for (uint8_t ix = 0; ix < HUBA_MEDIAN_COUNT; ix++) {
+        // read value from Huba sensor (zacwire)
+        int err = huba713_read(&huba_pressure, &huba_temperature);
+        if (err == 0) {
+            median_pressure[ix] = huba_pressure;
+            median_temperature[ix] = huba_temperature;
+        } else {
+            // If the parity is not 0x00, the data is invalid, so set values to
+            // invalid
+            errs++;
+            median_pressure[ix] = 0;
+            median_temperature[ix] = 200.0f;
+        }
+    }
+    // Make sure there are enough valid measurements to perform median
+    if (errs < HUBA_MEDIAN_COUNT / 2) {
+        insertion_sort_u16(median_pressure, HUBA_MEDIAN_COUNT);
+        insertion_sort_f(median_temperature, HUBA_MEDIAN_COUNT);
+        huba_pressure = median_pressure[HUBA_MEDIAN_COUNT / 2];
+        huba_temperature = median_temperature[HUBA_MEDIAN_COUNT / 2];
+    } else {
         huba_pressure = 0;
-        huba_temperature = 200.0;
+        huba_temperature = 200.0f;
     }
     delay_us(1000);
 
