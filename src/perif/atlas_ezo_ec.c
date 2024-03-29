@@ -13,7 +13,9 @@
 #include <util/delay.h>
 
 /// @brief Initialize the Atlas Scientific EZO EC
-void atlas_ezo_ec_init(void) { uart_init(); }
+void atlas_ezo_ec_init(void) {
+    atlas_ezo_ec_disable();
+}
 
 /// @brief Disable the Atlas Scientific EZO EC
 /// @details This function will disable the Atlas Scientific EZO EC by setting
@@ -21,7 +23,7 @@ void atlas_ezo_ec_init(void) { uart_init(); }
 /// off
 void atlas_ezo_ec_disable() {
     // Set enable pin as input; pull-down will turn the isolator board off
-    ENABLE_CONDUCTIVITY_PORT.DIR &= ~ENABLE_CONDUCTIVITY_PIN;
+    ENABLE_CONDUCTIVITY_PORT.DIRCLR = ENABLE_CONDUCTIVITY_PIN;
     uart_disable();
 }
 
@@ -30,8 +32,8 @@ void atlas_ezo_ec_disable() {
 /// the enable pin high
 void atlas_ezo_ec_enable() {
     // Set enable pin as input; pull-up will turn the isolator board off
-    ENABLE_CONDUCTIVITY_PORT.DIR |= ENABLE_CONDUCTIVITY_PIN;
-    ENABLE_CONDUCTIVITY_PORT.OUT |= ENABLE_CONDUCTIVITY_PIN;
+    ENABLE_CONDUCTIVITY_PORT.DIRSET = ENABLE_CONDUCTIVITY_PIN;
+    ENABLE_CONDUCTIVITY_PORT.OUTSET = ENABLE_CONDUCTIVITY_PIN;
     uart_init();
     atlas_ezo_ec_waitForBoot();
 }

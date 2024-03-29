@@ -69,7 +69,7 @@ void zacwire_read_byte(uint8_t *data, uint8_t *parity) {
 /// @return validity of the data: 0 is valid, -1 is invalid
 /// @condition The bus is idle
 int8_t zacwire_read(uint8_t *data, uint8_t count) {
-    uint8_t parity;
+    uint8_t parity = 0;
     ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
         wait_for_idle();
         while (count--) {

@@ -7,7 +7,7 @@
 
 #include <stdint.h>
 
-//void atlas_ezo_ec_init(void);
+void atlas_ezo_ec_init(void);
 int atlas_ezo_ec_requestValue(uint8_t *value);
 int atlas_ezo_ec_disableContinuousReading(void);
 int atlas_ezo_ec_waitForBoot(void);

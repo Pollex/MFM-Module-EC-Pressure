@@ -60,6 +60,7 @@ static void pwr_init(void);
 void perform_measurements(void);
 
 #define FLAG_CALIBRATED 0x01
+#define FLAG_HUBA_ERR 0x02
 #define HUBA_MEDIAN_COUNT 11
 
 // Forward declaration of variables
@@ -83,8 +84,8 @@ ds18b20_t d;
 /// @brief Initialize the power control
 /// @details 5V and 3V3 will be disabled after initialization
 void pwr_init(void) {
-    ENABLE_5V_PORT.DIR |= ENABLE_5V_PIN;   // 5V_on as output
-    ENABLE_3V3_PORT.DIR |= ENABLE_3V3_PIN; // 3V3_on as output
+    ENABLE_5V_PORT.DIRSET = ENABLE_5V_PIN;   // 5V_on as output
+    ENABLE_3V3_PORT.DIRSET = ENABLE_3V3_PIN; // 3V3_on as output
 
     pwr_3v3Enable(PWR_DISABLE);
     pwr_5vEnable(PWR_DISABLE);
@@ -93,20 +94,20 @@ void pwr_init(void) {
 /// @brief Enable/disable 5V
 /// @param enable PWR_DISABLE (0x00) to disable, PWR_ENABLE (0x01) to enable
 void pwr_5vEnable(uint8_t enable) {
-    if (enable != 0x00) {
-        ENABLE_5V_PORT.OUT |= ENABLE_5V_PIN; // Switch 5V_on to on
+    if (enable > 0) {
+        ENABLE_5V_PORT.OUTSET = ENABLE_5V_PIN; // Switch 5V_on to on
     } else {
-        ENABLE_5V_PORT.OUT &= ~ENABLE_5V_PIN; // Switch 5V_on to off
+        ENABLE_5V_PORT.OUTCLR = ENABLE_5V_PIN; // Switch 5V_on to off
     }
 }
 
 /// @brief Enable/disable 3V3
 /// @param enable PWR_DISABLE (0x00) to disable, PWR_ENABLE (0x01) to enable
 void pwr_3v3Enable(uint8_t enable) {
-    if (enable != 0x00) {
-        ENABLE_3V3_PORT.OUT &= ~ENABLE_3V3_PIN; // Switch 3V3_on to on
+    if (enable > 0) {
+        ENABLE_3V3_PORT.OUTCLR = ENABLE_3V3_PIN; // Switch 3V3_on to on
     } else {
-        ENABLE_3V3_PORT.OUT |= ENABLE_3V3_PIN; // Switch 3V3_on to off
+        ENABLE_3V3_PORT.OUTSET = ENABLE_3V3_PIN; // Switch 3V3_on to off
     }
 }
 
@@ -168,35 +169,38 @@ void perform_measurements() {
 
     // Measure huba sensor using median filter
     int errs = 0;
-    for (uint8_t ix = 0; ix < HUBA_MEDIAN_COUNT; ix++) {
+    int index = 0;
+    for (uint8_t tries = 0; tries < HUBA_MEDIAN_COUNT; tries++) {
         // read value from Huba sensor (zacwire)
         int err = huba713_read(&huba_pressure, &huba_temperature);
         if (err == 0) {
-            median_pressure[ix] = huba_pressure;
-            median_temperature[ix] = huba_temperature;
+            median_pressure[index] = huba_pressure;
+            median_temperature[index++] = huba_temperature;
         } else {
-            // If the parity is not 0x00, the data is invalid, so set values to
-            // invalid
             errs++;
-            median_pressure[ix] = 0;
-            median_temperature[ix] = 200.0f;
         }
     }
-    // Make sure there are enough valid measurements to perform median
-    if (errs < HUBA_MEDIAN_COUNT / 2) {
-        insertion_sort_u16(median_pressure, HUBA_MEDIAN_COUNT);
-        insertion_sort_f(median_temperature, HUBA_MEDIAN_COUNT);
-        huba_pressure = median_pressure[HUBA_MEDIAN_COUNT / 2];
-        huba_temperature = median_temperature[HUBA_MEDIAN_COUNT / 2];
-    } else {
-        huba_pressure = 0;
-        huba_temperature = 200.0f;
-    }
-    delay_us(1000);
 
     // The HUBA sensor is the only sensor in need of 5V, so disable it after
     // reading
     pwr_5vEnable(PWR_DISABLE);
+
+    // Prepare HUBA Sensor values
+    if (errs > 0) {
+        packet.flags |= FLAG_HUBA_ERR;
+    }
+    // Make sure there is atleast one valid measurements to perform median
+    if (index > 0) {
+        insertion_sort_u16(median_pressure, index);
+        insertion_sort_f(median_temperature, index);
+        huba_pressure = median_pressure[index / 2];
+        huba_temperature = median_temperature[index / 2];
+    } else {
+        // Otherwise error
+        huba_pressure = 0;
+        huba_temperature = 200.0f;
+    }
+    delay_us(1000);
 
     // read value from DS18B20 sensor (one-wire)
     ds18b20_read(&d, 0);
@@ -303,17 +307,16 @@ int main() {
 
     // Initialize the delay system
     delay_init();
+    delay_ms(500);
 
     // Initialize the power control
     pwr_init();
 
-    PORTA.DIRSET = PIN1_bm;
-    PORTA.OUTTGL = PIN1_bm;
-    // Make sure the peripherals (sensors) are off
-    // delay_ms(1000);
-
     // Set resolution of DS18B20 temperature sensor
     d.resolution = DS18B20_RES_12;
+
+    // Initialize EZO EC
+    atlas_ezo_ec_init();
 
     // Initialize the HUBA sensor
     huba713_init();
