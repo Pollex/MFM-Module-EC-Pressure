@@ -43,7 +43,6 @@
 #include "mcu/twi.h"
 #include "mcu/util.h"
 #include "os/os.h"
-#include "perif/atlas_ezo_ec.h"
 #include "perif/ds18b20.h"
 #include "perif/huba713.h"
 #include <string.h>
@@ -200,38 +199,38 @@ void perform_measurements() {
         huba_pressure = 0;
         huba_temperature = 200.0f;
     }
-    delay_us(1000);
+    // delay_us(1000);
 
     // read value from DS18B20 sensor (one-wire)
-    ds18b20_read(&d, 0);
-    ds18b20_temperature = ds18b20_read(&d, 0);
+    // ds18b20_read(&d, 0);
+    // ds18b20_temperature = ds18b20_read(&d, 0);
 
-    // Turn the Atlas Scientific EZO EC sensor on by setting the enable pin
-    atlas_ezo_ec_enable();
-
-    // We only want to read the value once, so disable continuous reading
-    atlas_ezo_ec_disableContinuousReading();
-
-    // Set temperature compensation
-    if (ds18b20_temperature > -50 && ds18b20_temperature < 50) {
-        atlas_ezo_ec_setTemperature((uint8_t)ds18b20_temperature);
-    } else {
-        atlas_ezo_ec_setTemperature(10);
-    }
-
-    if (doCalibration) {
-        atlas_ezo_ec_calibrate();
-        packet.flags |= FLAG_CALIBRATED;
-        doCalibration = 0;
-    }
-
-    // read value from Atlas Scientific EZO EC sensor (UART)
-    atlas_ezo_ec_requestValue(conductivity);
-
-    // Small delay before turning off the sensor
-    delay_us(200);
-    // Turn the Atlas Scientific EZO EC sensor off by clearing the enable pin
-    atlas_ezo_ec_disable();
+    // // Turn the Atlas Scientific EZO EC sensor on by setting the enable pin
+    // atlas_ezo_ec_enable();
+    //
+    // // We only want to read the value once, so disable continuous reading
+    // atlas_ezo_ec_disableContinuousReading();
+    //
+    // // Set temperature compensation
+    // if (ds18b20_temperature > -50 && ds18b20_temperature < 50) {
+    //     atlas_ezo_ec_setTemperature((uint8_t)ds18b20_temperature);
+    // } else {
+    //     atlas_ezo_ec_setTemperature(10);
+    // }
+    //
+    // if (doCalibration) {
+    //     atlas_ezo_ec_calibrate();
+    //     packet.flags |= FLAG_CALIBRATED;
+    //     doCalibration = 0;
+    // }
+    //
+    // // read value from Atlas Scientific EZO EC sensor (UART)
+    // atlas_ezo_ec_requestValue(conductivity);
+    //
+    // // Small delay before turning off the sensor
+    // delay_us(200);
+    // // Turn the Atlas Scientific EZO EC sensor off by clearing the enable pin
+    // atlas_ezo_ec_disable();
 
     // Small delay to give the CPU time to read the last data from the UART
     delay_us(500);
@@ -242,10 +241,10 @@ void perform_measurements() {
     // Store the data in data struct
     packet.huba_pressure = huba_pressure;
     packet.huba_temperature = huba_temperature;
-    packet.ds18b20_temperature = ds18b20_temperature;
-    for (int ii = 0; ii < 8; ii++) {
-        packet.atlas_conductivity[ii] = conductivity[ii];
-    }
+    // packet.ds18b20_temperature = ds18b20_temperature;
+    // for (int ii = 0; ii < 8; ii++) {
+    //     packet.atlas_conductivity[ii] = conductivity[ii];
+    // }
 }
 
 /// @brief Handler for cmd 0x80 from I2C master
@@ -313,10 +312,10 @@ int main() {
     pwr_init();
 
     // Set resolution of DS18B20 temperature sensor
-    d.resolution = DS18B20_RES_12;
+    // d.resolution = DS18B20_RES_12;
 
     // Initialize EZO EC
-    atlas_ezo_ec_init();
+    // atlas_ezo_ec_init();
 
     // Initialize the HUBA sensor
     huba713_init();
