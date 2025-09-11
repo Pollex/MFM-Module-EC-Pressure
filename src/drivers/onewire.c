@@ -2,6 +2,7 @@
 
 #include <avr/io.h>
 #include <util/delay.h>
+#include <math.h>
 
 #define _high_cycles 4
 #define _sample_cycles 4

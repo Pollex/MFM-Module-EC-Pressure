@@ -213,3 +213,5 @@ doc/
 build/
 *.lck
 production/
+hardware/jlcpcb/
+hardware/*.zip
